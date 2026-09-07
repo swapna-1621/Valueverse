@@ -7,6 +7,11 @@ function App() {
 
   const [formData, setFormData] = useState({});
 
+  // Backend result
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
   const domains = [
     {
       name: "Waste2Value",
@@ -39,12 +44,16 @@ function App() {
     setSelectedDomain(domain);
     setMode(null);
     setFormData({});
+    setResult(null);
+    setError("");
   };
 
   const goBack = () => {
     setSelectedDomain(null);
     setMode(null);
     setFormData({});
+    setResult(null);
+    setError("");
   };
 
   const handleChange = (e) => {
@@ -52,18 +61,112 @@ function App() {
       ...formData,
       [e.target.name]: e.target.value,
     });
+
+    // Clear old messages when user changes input
+    setResult(null);
+    setError("");
   };
 
-  const handleSubmit = (e) => {
+  // =================================================
+  // SEND FORM DATA TO FASTAPI BACKEND
+  // =================================================
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
-    console.log("Domain:", selectedDomain);
-    console.log("Mode:", mode);
-    console.log("Form Data:", formData);
+    setLoading(true);
+    setError("");
+    setResult(null);
 
-    alert(
-      `${mode === "sell" ? "Sell" : "Buy"} request submitted successfully!`
-    );
+    try {
+      // ---------------------------------------------
+      // Find the correct "item" value based on domain
+      // ---------------------------------------------
+
+      let item = "";
+
+      if (selectedDomain === "Waste2Value") {
+        item = formData.wasteType;
+      } else if (selectedDomain === "Food2Value") {
+        item = formData.foodType;
+      } else if (selectedDomain === "Fashion2Value") {
+        item = formData.clothingType;
+      } else if (selectedDomain === "E2Value") {
+        item = formData.deviceType;
+      } else if (selectedDomain === "Repair2Value") {
+        item = formData.product;
+      }
+
+      // ---------------------------------------------
+      // Create data for backend
+      // ---------------------------------------------
+
+      const dataToSend = {
+        item: item,
+        location: formData.location,
+      };
+
+      // ---------------------------------------------
+      // Add quantity only when the form has quantity
+      // ---------------------------------------------
+
+      if (formData.quantity !== undefined && formData.quantity !== "") {
+        const numericQuantity = parseFloat(formData.quantity);
+
+        if (!isNaN(numericQuantity)) {
+          dataToSend.quantity = numericQuantity;
+        }
+      }
+
+      console.log("Sending to backend:", dataToSend);
+
+      // ---------------------------------------------
+      // Send request to FastAPI
+      // ---------------------------------------------
+
+      const response = await fetch(
+        "http://127.0.0.1:8000/api/value",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type": "application/json",
+          },
+
+          body: JSON.stringify(dataToSend),
+        }
+      );
+
+      // ---------------------------------------------
+      // Check backend response
+      // ---------------------------------------------
+
+      if (!response.ok) {
+        throw new Error(
+          `Backend error: ${response.status}`
+        );
+      }
+
+      const data = await response.json();
+
+      console.log("Backend response:", data);
+
+      // ---------------------------------------------
+      // Display backend result
+      // ---------------------------------------------
+
+      setResult(data);
+
+    } catch (err) {
+      console.error("Error connecting to backend:", err);
+
+      setError(
+        "Unable to connect to the backend. Make sure the FastAPI server is running on http://127.0.0.1:8000."
+      );
+
+    } finally {
+      setLoading(false);
+    }
   };
 
   // =========================
@@ -75,19 +178,26 @@ function App() {
       <div className="app">
 
         <header className="navbar">
+
           <div className="logo">VALUEVERSE</div>
 
-          <button className="back-button" onClick={goBack}>
+          <button
+            className="back-button"
+            onClick={goBack}
+          >
             ← Back to Domains
           </button>
+
         </header>
 
         <main className="domain-page">
 
           <div className="domain-page-icon">
-            {domains.find(
-              (d) => d.name === selectedDomain
-            )?.icon}
+            {
+              domains.find(
+                (d) => d.name === selectedDomain
+              )?.icon
+            }
           </div>
 
           <h1>{selectedDomain}</h1>
@@ -123,6 +233,7 @@ function App() {
                     I have a resource or product that I
                     want to sell.
                   </p>
+
                 </button>
 
                 <button
@@ -137,6 +248,7 @@ function App() {
                     I am looking for a resource or
                     product to buy.
                   </p>
+
                 </button>
 
               </div>
@@ -153,6 +265,7 @@ function App() {
               handleChange={handleChange}
               handleSubmit={handleSubmit}
               setMode={setMode}
+              loading={loading}
             />
           )}
 
@@ -165,7 +278,68 @@ function App() {
               handleChange={handleChange}
               handleSubmit={handleSubmit}
               setMode={setMode}
+              loading={loading}
             />
+          )}
+
+          {/* =========================
+              BACKEND RESULT
+          ========================= */}
+
+          {result && (
+            <section
+              style={{
+                marginTop: "30px",
+                padding: "20px",
+                borderRadius: "12px",
+                border: "1px solid #ddd",
+                background: "#f8fff8",
+              }}
+            >
+              <h2>Backend Response</h2>
+
+              <p>
+                <strong>Message:</strong>{" "}
+                {result.message}
+              </p>
+
+              <p>
+                <strong>Item:</strong>{" "}
+                {result.item}
+              </p>
+
+              {result.quantity !== undefined && (
+                <p>
+                  <strong>Quantity:</strong>{" "}
+                  {result.quantity}
+                </p>
+              )}
+
+              <p>
+                <strong>Location:</strong>{" "}
+                {result.location}
+              </p>
+            </section>
+          )}
+
+          {/* =========================
+              ERROR MESSAGE
+          ========================= */}
+
+          {error && (
+            <section
+              style={{
+                marginTop: "20px",
+                padding: "15px",
+                borderRadius: "10px",
+                border: "1px solid #ffcccc",
+                background: "#fff5f5",
+              }}
+            >
+              <p style={{ margin: 0 }}>
+                ❌ {error}
+              </p>
+            </section>
           )}
 
         </main>
@@ -193,7 +367,10 @@ function App() {
 
       </header>
 
-      <main className="main-container" id="home">
+      <main
+        className="main-container"
+        id="home"
+      >
 
         <section className="hero">
 
@@ -273,6 +450,7 @@ function SellForm({
   handleChange,
   handleSubmit,
   setMode,
+  loading,
 }) {
 
   return (
@@ -537,8 +715,11 @@ function SellForm({
         <button
           type="submit"
           className="submit-button"
+          disabled={loading}
         >
-          Submit Sell Request
+          {loading
+            ? "Sending..."
+            : "Submit Sell Request"}
         </button>
 
       </form>
@@ -558,6 +739,7 @@ function BuyForm({
   handleChange,
   handleSubmit,
   setMode,
+  loading,
 }) {
 
   return (
@@ -814,8 +996,11 @@ function BuyForm({
         <button
           type="submit"
           className="submit-button"
+          disabled={loading}
         >
-          Submit Buy Request
+          {loading
+            ? "Sending..."
+            : "Submit Buy Request"}
         </button>
 
       </form>
